@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/eyedeekay/darkssh"
 	"log"
 	"net"
 	"os"
@@ -15,15 +16,14 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/eyedeekay/darkssh/goph"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 var (
 	err           error
-	auth          goph.Auth
-	client        *goph.Client
+	auth          darkssh.Auth
+	client        *darkssh.Client
 	addr          string
 	user          string
 	port          int
@@ -124,14 +124,14 @@ func main() {
 	addr = strings.SplitN(args[0], "@", 2)[1]
 
 	if agent {
-		auth = goph.UseAgent()
+		auth = darkssh.UseAgent()
 	} else if pass {
-		auth = goph.Password(askPass("Enter SSH Password: "))
+		auth = darkssh.Password(askPass("Enter SSH Password: "))
 	} else {
-		auth = goph.Key(key, getPassphrase(passphrase))
+		auth = darkssh.Key(key, getPassphrase(passphrase))
 	}
 
-	client, err = goph.NewConn(user, addr, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
+	client, err = darkssh.NewConn(user, addr, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
 		log.Println("connection generated")
 		//
 		// If you want to connect to new hosts.
@@ -141,7 +141,7 @@ func main() {
 
 		// hostFound: is host in known hosts file.
 		// err: error if key not in known hosts file OR host in known hosts file but key changed!
-		hostFound, err := goph.CheckKnownHost(host, remote, key, "")
+		hostFound, err := darkssh.CheckKnownHost(host, remote, key, "")
 		log.Println("host:", host, "remote:", remote, "key", key)
 		// Host in known hosts but key mismatch!
 		// Maybe because of MAN IN THE MIDDLE ATTACK!
@@ -162,7 +162,7 @@ func main() {
 		}
 
 		// Add the new host to known hosts file.
-		return goph.AddKnownHost(host, remote, key, "")
+		return darkssh.AddKnownHost(host, remote, key, "")
 	})
 
 	if err != nil {

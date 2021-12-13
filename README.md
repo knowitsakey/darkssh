@@ -1,35 +1,117 @@
-DarkSSH - SSH-over-Anonymous-Networks for Go
-============================================
+<div align="center">
+	<h1>Golang SSH Client.</h1>
+    <a href="https://github.com/melbahja/goph">
+        <img src="https://github.com/melbahja/goph/raw/master/.github/goph.png" width="200">
+    </a>
+    <h4 align="center">
+	   Fast and easy golang ssh client module.
+	</h4>
+</div>
 
-This is a tool for automatically connecting to SSH Servers and SSH-based
-Services which are hosted on `.i2p` and `.onion` resources. Given an .i2p
-or .onion host, it will dial out using their respective sockets. It is
-used to make managing many `.i2p` or `.onion`-hosted SSH services easier
-by natively handling the `known_hosts` file and automatically handling
-proxy setup and client key-management for services which use blocklisting
-and allowlisting facilities provided by the hidden services, or even more
-sophisticated features like Encrypted LeaseSets. As a fringe benefit,
-when addressing services by their cryptographic identifiers(i.e. the 
-`.b32.i2p` or `.onion` domains) there is no chance of impersonation.
-Eventually, it will implement a drop-in replacement for a real SSH client
-so it can be used as a ProxyCommand or as part of a `.i2p` or `.onion` only
-selfhosted workflow.
+<p align="center">
+    <a href="#installation">Installation</a> ❘
+    <a href="#features">Features</a> ❘
+    <a href="#usage">Usage</a> ❘
+    <a href="#examples">Examples</a> ❘
+    <a href="#license">License</a>
+</p>
 
-What's in this repository:
 
-```bash        
-# a terminal SSH client - interface is *UNSTABLE*, forked from goph
-# for modification
-./cmd/darkssh
-# a slightly-modified version of melbahja/goph, which automatically
-# configures itself for I2P and Tor Transports
-./goph
-# implementations of the required interfaces for x/crypto/ssh
-./
+## Installation
+
+```bash
+go get github.com/melbahja/goph
 ```
 
-The goal is to be exactly compatible with any other SSH client, so things
-that proxy commands to SSH, like rsync or SSHFS, can use it instead when
-someone wants to use such a tool over Tor or I2P.
+## Features
 
-Eventually, an SSH server will also be implemented.
+- Easy to use.
+- Supports **known hosts** by default.
+- Supports connections with **passwords**.
+- Supports connections with **private keys**.
+- Supports connections with **protected private keys** with passphrase.
+- Supports **upload** files from local to remote.
+- Supports **download** files from remote to local.
+- Supports connections with **ssh agent** (Unix systems only).
+- Supports adding new hosts to **known_hosts file**.
+
+## Usage
+
+Run a command via ssh:
+```go
+package main
+
+import (
+	"log"
+	"fmt"
+	"github.com/melbahja/goph"
+)
+
+func main() {
+
+	// Start new ssh connection with private key.
+	client, err := goph.New("root", "192.1.1.3", goph.Key("/home/mohamed/.ssh/id_rsa", ""))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Defer closing the network connection.
+	defer client.Close()
+
+	// Execute your command.
+	out, err := client.Run("ls /tmp/")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Get your output as []byte.
+	fmt.Println(string(out))
+}
+```
+
+##### Start connection with protected private key:
+```go
+client, err := goph.New("root", "192.1.1.3", goph.Key("/home/mohamed/.ssh/id_rsa", "you_passphrase_here"))
+```
+
+##### Start connection with password:
+```go
+client, err := goph.New("root", "192.1.1.3", goph.Password("you_password_here"))
+```
+
+##### Start connection with ssh agent (Unix systems only):
+```go
+client, err := goph.New("root", "192.1.1.3", goph.UseAgent())
+```
+
+##### Upload local file to remote:
+```go
+err := client.Upload("/path/to/local/file", "/path/to/remote/file")
+```
+
+##### Download remote file to local:
+```go
+err := client.Download("/path/to/remote/file", "/path/to/local/file")
+```
+
+##### Execute bash commands:
+```go
+out, err := client.Run("bash -c 'printenv'")
+```
+
+##### Execute bash command with env variables:
+```go
+out, err := client.Run(`env MYVAR="MY VALUE" bash -c 'echo $MYVAR;'`)
+```
+
+For more read the [go docs](https://pkg.go.dev/github.com/melbahja/goph).
+
+## Examples
+
+See [Examples](https://github.com/melbahja/ssh/blob/master/examples).
+
+## License
+
+Goph is provided under the [MIT License](https://github.com/melbahja/goph/blob/master/LICENSE).

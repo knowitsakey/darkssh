@@ -1,7 +1,7 @@
 // Copyright 2020 Mohammed El Bahja. All rights reserved.
 // Use of this source code is governed by a MIT license.
 
-package goph
+package darkssh
 
 import (
 	"bufio"
@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/eyedeekay/darkssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -30,19 +29,19 @@ func Conn(c *Client, cfg *ssh.ClientConfig) (err error) {
 	if c.Proto == "" {
 		if strings.Contains(c.HostAddr, ".i2p") {
 			log.Println("I2P address detected")
-			c.Proto = darkssh.STREAMING
+			c.Proto = STREAMING
 		} else if strings.Contains(c.HostAddr, ".onion") {
 			log.Println("Tor address detected")
-			c.Proto = darkssh.STREAMING
+			c.Proto = STREAMING
 		} else {
 			c.Proto = TCP
 		}
 	}
 
 	if strings.Contains(c.HostAddr, ".i2p") {
-		c.Conn, err = darkssh.DialI2P(c.Proto, fmt.Sprintf("%s", c.HostAddr), cfg)
+		c.Conn, err = DialI2P(c.Proto, fmt.Sprintf("%s", c.HostAddr), cfg)
 	} else if strings.Contains(c.HostAddr, ".onion") {
-		c.Conn, err = darkssh.DialTor(c.Proto, fmt.Sprintf("%s", c.HostAddr), cfg)
+		c.Conn, err = DialTor(c.Proto, fmt.Sprintf("%s", c.HostAddr), cfg)
 	} else {
 		c.Conn, err = ssh.Dial(c.Proto, fmt.Sprintf("%s:%d", c.HostAddr, c.Port), cfg)
 	}

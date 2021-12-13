@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-package goph
+package darkssh
 
 import (
 	"context"
@@ -13,13 +13,11 @@ import (
 	//"sync/atomic"
 	"time"
 
-	"github.com/eyedeekay/darkssh"
 	"golang.org/x/crypto/ssh"
 )
 
 func (t Client) BindTunnel(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-
 	for {
 		var once sync.Once // Only print errors once per session
 		func() {
@@ -109,7 +107,7 @@ func (t Client) DialTunnel(ctx context.Context, wg *sync.WaitGroup, client *ssh.
 	case '>':
 		cn2, err = client.Dial("tcp", t.DialAddr)
 	case '<':
-		cn2, err = darkssh.DialConn("tcp", t.DialAddr)
+		cn2, err = DialConn("tcp", t.DialAddr)
 	}
 	if err != nil {
 		fmt.Printf("(%v) dial error: %v", t, err)

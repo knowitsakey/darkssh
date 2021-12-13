@@ -1,15 +1,14 @@
 // Copyright 2020 Mohammed El Bahja. All rights reserved.
 // Use of this source code is governed by a MIT license.
 
-package goph
+package darkssh
 
 import (
 	"fmt"
-	"net"
-	"os"
-
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"net"
+	"os"
 )
 
 func UseAgent() Auth {

@@ -1,7 +1,7 @@
 // Copyright 2020 Mohammed El Bahja. All rights reserved.
 // Use of this source code is governed by a MIT license.
 
-package goph
+package darkssh
 
 import (
 	"github.com/eyedeekay/sshtunnel/tunnel"
@@ -48,6 +48,7 @@ func NewConn(user string, addr string, auth Auth, callback ssh.HostKeyCallback) 
 		Interactive: &Interactive{
 			Port: 22,
 		},
+
 		Tunnel: &sshtunnel.Tunnel{
 			HostAddr: addr,
 			User:     user,

@@ -1,7 +1,7 @@
 // Copyright 2020 Mohammed El Bahja. All rights reserved.
 // Use of this source code is governed by a MIT license.
 
-package goph
+package darkssh
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ func Password(pass string) Auth {
 	}
 }
 
-func askPass(msg string) string {
+func AskPass(msg string) string {
 
 	fmt.Print(msg)
 
@@ -35,7 +35,7 @@ func askPass(msg string) string {
 	return strings.TrimSpace(string(pass))
 }
 
-func getPassphrase(ask bool) string {
+func GetPassphrase(ask bool) string {
 
 	if ask {
 		return askPass("Enter Private Key Passphrase: ")
