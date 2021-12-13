@@ -81,7 +81,7 @@ var (
 	auth          Auth
 	client        *Client
 	addr          string
-	user          string
+	user1         string
 	port          int
 	key           string
 	cmd           string
@@ -176,7 +176,7 @@ func Connect() {
 		cmd = strings.Join(args[1:], " ")
 	}
 
-	user = strings.SplitN(args[0], "@", 2)[0]
+	user1 = strings.SplitN(args[0], "@", 2)[0]
 	addr = strings.SplitN(args[0], "@", 2)[1]
 
 	if agent1 {
@@ -187,7 +187,7 @@ func Connect() {
 		auth = Key(key, getPassphrase(passphrase))
 	}
 
-	client, err = NewConn(user, addr, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
+	client, err = NewConn(user1, addr, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
 		log.Println("connection generated")
 		//
 		// If you want to connect to new hosts.

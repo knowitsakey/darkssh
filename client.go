@@ -4,7 +4,7 @@
 package darkssh
 
 import (
-	"github.com/eyedeekay/sshtunnel/tunnel"
+	//"github.com/eyedeekay/sshtunnel/tunnel"
 	"golang.org/x/crypto/ssh"
 	"time"
 )
@@ -16,7 +16,7 @@ type Interactive struct {
 }
 
 type Client struct {
-	*sshtunnel.Tunnel
+	*Tunnel
 	*Interactive
 	Auth
 }
@@ -49,7 +49,7 @@ func NewConn(user string, addr string, auth Auth, callback ssh.HostKeyCallback) 
 			Port: 22,
 		},
 
-		Tunnel: &sshtunnel.Tunnel{
+		Tunnel: &Tunnel{
 			HostAddr: addr,
 			User:     user,
 			HostKeys: callback,
