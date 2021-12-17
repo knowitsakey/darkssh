@@ -6,6 +6,7 @@ package darkssh
 import (
 	//"github.com/eyedeekay/sshtunnel/tunnel"
 	"golang.org/x/crypto/ssh"
+	"strconv"
 	"time"
 )
 
@@ -64,6 +65,46 @@ func NewConn(user string, addr string, auth Auth, callback ssh.HostKeyCallback) 
 	})
 
 	return
+}
+
+func NewConn2(user string, addr string, auth Auth, hsaddr string, port int, doubleport int, callback ssh.HostKeyCallback) (c *ssh.Client, err error) {
+	//var err error
+	//socks5Address := "127.0.0.1:" + strconv.Itoa(doubleport)
+	//err = Conn(c, &ssh.ClientConfig{
+	//	User:            c.User,
+	//	Auth:            auth,
+	//	Timeout:         600 * time.Second,
+	//	HostKeyCallback: callback,
+	//})
+	sshConf := &ssh.ClientConfig{
+		User:            "based",
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         600 * time.Second,
+	}
+	proxyAddress := "127.0.0.1:" + strconv.Itoa(port)
+	tp, err := NewTorGate(proxyAddress)
+
+	if err != nil {
+		return nil, err
+	}
+	conn1, err := tp.DialTor(hsaddr + ":22")
+	//d, err := torCtx.Dialer(ctx, conf1)
+	//conn1, err := d.DialContext(ctx, "tcp", hsaddr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn2, chans, reqs, err := ssh.NewClientConn(conn1, proxyAddress, sshConf)
+	if err != nil {
+		return nil, err
+	}
+
+	//torProxy1.client, err := &ssh.NewClient(c, chans, reqs)
+	//client1 := &ssh.NewClient(c, chans, reqs
+	c = ssh.NewClient(conn2, chans, reqs)
+	return c, err
+
 }
 
 // Get new ssh session from client connection

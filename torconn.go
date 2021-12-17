@@ -2,6 +2,7 @@ package darkssh
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -19,12 +20,14 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var (
-	err           error
-	Auth1         Auth
-	MyClient      *Client
+	err      error
+	Auth1    Auth
+	MyClient *Client
+
 	MyAddr        string
 	MyUser        string
 	MyPort        int
@@ -36,6 +39,7 @@ var (
 	LocalForward  string
 	RemoteForward string
 	TorInstancePP int
+	SocksPP       int
 )
 
 func init() {
@@ -92,6 +96,7 @@ func init() {
 	flag.BoolVar(&MyAgent, "goph-MyAgent", true, "use ssh MyAgent for authentication (unix systems only).")
 	flag.BoolVar(&Passphrase, "goph-Passphrase", false, "ask for private key Passphrase.")
 	flag.IntVar(&TorInstancePP, "t", 22, "tor port number")
+	flag.IntVar(&SocksPP, "p", 22, "tor port number")
 }
 
 // TORHost is the host where Tor is running
@@ -185,7 +190,158 @@ func command(args []string) string {
 	return strings.TrimRight(c, " ")
 }
 
-func launchSocks(client *Client, port int) error {
+//func Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+//	conn, err := net.DialTimeout(network, addr, config.Timeout)
+//	if err != nil {
+//		return nil, err
+//	}
+//	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return ssh.NewClient(c, chans, reqs), nil
+//}
+
+/*
+// Dial initiates a connection to the addr from the remote host.
+// The resulting connection has a zero LocalAddr() and RemoteAddr().
+func (c *Client) Dial(n, addr string) (net.Conn, error) {
+	var ch Channel
+	switch n {
+	case "tcp", "tcp4", "tcp6":
+		// Parse the address into host and numeric port.
+		host, portString, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		port, err := strconv.ParseUint(portString, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		ch, err = c.dial(net.IPv4zero.String(), 0, host, int(port))
+		if err != nil {
+			return nil, err
+		}
+		// Use a zero address for local and remote address.
+		zeroAddr := &net.TCPAddr{
+			IP:   net.IPv4zero,
+			Port: 0,
+		}
+		return &chanConn{
+			Channel: ch,
+			laddr:   zeroAddr,
+			raddr:   zeroAddr,
+		}, nil
+	case "unix":
+		var err error
+		ch, err = c.dialStreamLocal(addr)
+		if err != nil {
+			return nil, err
+		}
+		return &chanConn{
+			Channel: ch,
+			laddr: &net.UnixAddr{
+				Name: "@",
+				Net:  "unix",
+			},
+			raddr: &net.UnixAddr{
+				Name: addr,
+				Net:  "unix",
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("ssh: unsupported protocol: %s", n)
+	}
+}
+*/
+type TorGate string
+
+func NewTorGate(torgate string) (*TorGate, error) {
+	//torgate = TOR_GATE_
+	duration, _ := time.ParseDuration("10s")
+	connect, err := net.DialTimeout("tcp4", torgate, duration)
+
+	if err != nil {
+		return nil, errors.New("Could not test TOR_GATE_: " + err.Error())
+	}
+
+	// Tor proxies reply to anything that looks like
+	// HTTP GET or POST with known error message.
+	connect.Write([]byte("GET /\n"))
+	connect.SetReadDeadline(time.Now().Add(10 * time.Second))
+	buf := make([]byte, 4096)
+
+	for {
+		n, err := connect.Read(buf)
+
+		if err != nil {
+			return nil, errors.New("It is not TOR_GATE_")
+		}
+
+		if bytes.Contains(buf[:n], []byte("Tor is not an HTTP Proxy")) {
+			connect.Close()
+			gate := TorGate(torgate)
+
+			return &gate, nil
+		}
+	}
+}
+
+// DialTor dials to the .onion address
+func (gate *TorGate) DialTor(address string) (net.Conn, error) {
+	dialer, err := proxy.SOCKS5("tcp4", string(*gate), nil, proxy.Direct)
+
+	if err != nil {
+		return nil, errors.New("Could not connect to TOR_GATE_: " + err.Error())
+	}
+
+	connect, err := dialer.Dial("tcp", address)
+
+	if err != nil {
+		return nil, errors.New("Failed to connect: " + err.Error())
+	}
+
+	return connect, nil
+
+}
+
+//{
+//proxyAddress := "127.0.0.1:" + strconv.Itoa(*torProxy1.ProxyPort)
+//tp, err := NewTorGate(proxyAddress)
+//
+//if err != nil {
+//return nil, err
+//}
+//conn1, err := tp.DialTor(hsaddr + ":22")
+////d, err := torCtx.Dialer(ctx, conf1)
+////conn1, err := d.DialContext(ctx, "tcp", hsaddr)
+//if err != nil {
+//return nil, err
+//}
+//c, chans, reqs, err := ssh.NewClientConn(conn1, proxyAddress, sshConf)
+//if err != nil {
+//return nil, err
+//}
+////torProxy1.client, err := &ssh.NewClient(c, chans, reqs)
+////client1 := &ssh.NewClient(c, chans, reqs
+//torProxy1.Client = ssh.NewClient(c, chans, reqs)
+////client1 := ssh.NewClient(c, chans, reqs)
+//fmt.Println("Connected to .onion successfully!")
+//
+////defer client1.Close()
+//
+//fmt.Println("connected to ssh server")
+//fmt.Println("we trine kreate socks serva at"+socks5Address, err)
+//conf := &socks5.Config{
+//Dial: func (ctx context.Context, network, addr string) (net.Conn, error) {
+//return torProxy1.Client.Dial(network, addr)
+//},
+//}
+//
+//torProxy1.Socks5s, err = socks5.New(conf)
+//}
+
+func launchSocks(client *ssh.Client, port int) error {
 	socks5Address := "127.0.0.1:" + strconv.Itoa(port)
 	conf := &socks5.Config{
 		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -245,7 +401,9 @@ func Connect() {
 		Auth1 = Key(MyKey, getPassphrase(Passphrase))
 	}
 
-	MyClient, err = NewConn(MyUser, MyAddr, Auth1, func(host string, remote net.Addr, MyKey ssh.PublicKey) error {
+	MyClient.Interactive.Conn, err = NewConn2(MyUser, MyAddr, Auth1, MyAddr, 2, 2, func(host string, remote net.Addr, MyKey ssh.PublicKey) error {
+
+		//MyClient.Interactive.Conn, err = NewConn2(MyUser,MyAddr,Auth1)
 		log.Println("connection generated")
 		//
 		// If you want to connect to new hosts.
@@ -311,8 +469,8 @@ func Connect() {
 		fmt.Println(string(out), err)
 		return
 	}
-	port, err := GetFreePort()
-	launchSocks(MyClient, port)
+	//port, err := GetFreePort()
+	launchSocks(MyClient.Interactive.Conn, SocksPP)
 	// else open interactive mode.
 	if err = MyClient.Interact(); err != nil {
 		log.Fatal(err)
