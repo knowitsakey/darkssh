@@ -95,8 +95,8 @@ func init() {
 	flag.BoolVar(&MyPass, "goph-pass", false, "ask for ssh password instead of private key.")
 	flag.BoolVar(&MyAgent, "goph-MyAgent", true, "use ssh MyAgent for authentication (unix systems only).")
 	flag.BoolVar(&Passphrase, "goph-Passphrase", false, "ask for private key Passphrase.")
-	flag.IntVar(&TorInstancePP, "t", 22, "tor port number")
-	flag.IntVar(&SocksPP, "p", 22, "tor port number")
+	flag.IntVar(&TorInstancePP, "t", 9050, "tor port number")
+	flag.IntVar(&SocksPP, "s", 9080, "tor port number")
 }
 
 // TORHost is the host where Tor is running
@@ -190,70 +190,6 @@ func command(args []string) string {
 	return strings.TrimRight(c, " ")
 }
 
-//func Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
-//	conn, err := net.DialTimeout(network, addr, config.Timeout)
-//	if err != nil {
-//		return nil, err
-//	}
-//	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return ssh.NewClient(c, chans, reqs), nil
-//}
-
-/*
-// Dial initiates a connection to the addr from the remote host.
-// The resulting connection has a zero LocalAddr() and RemoteAddr().
-func (c *Client) Dial(n, addr string) (net.Conn, error) {
-	var ch Channel
-	switch n {
-	case "tcp", "tcp4", "tcp6":
-		// Parse the address into host and numeric port.
-		host, portString, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		port, err := strconv.ParseUint(portString, 10, 16)
-		if err != nil {
-			return nil, err
-		}
-		ch, err = c.dial(net.IPv4zero.String(), 0, host, int(port))
-		if err != nil {
-			return nil, err
-		}
-		// Use a zero address for local and remote address.
-		zeroAddr := &net.TCPAddr{
-			IP:   net.IPv4zero,
-			Port: 0,
-		}
-		return &chanConn{
-			Channel: ch,
-			laddr:   zeroAddr,
-			raddr:   zeroAddr,
-		}, nil
-	case "unix":
-		var err error
-		ch, err = c.dialStreamLocal(addr)
-		if err != nil {
-			return nil, err
-		}
-		return &chanConn{
-			Channel: ch,
-			laddr: &net.UnixAddr{
-				Name: "@",
-				Net:  "unix",
-			},
-			raddr: &net.UnixAddr{
-				Name: addr,
-				Net:  "unix",
-			},
-		}, nil
-	default:
-		return nil, fmt.Errorf("ssh: unsupported protocol: %s", n)
-	}
-}
-*/
 type TorGate string
 
 func NewTorGate(torgate string) (*TorGate, error) {
@@ -305,42 +241,6 @@ func (gate *TorGate) DialTor(address string) (net.Conn, error) {
 
 }
 
-//{
-//proxyAddress := "127.0.0.1:" + strconv.Itoa(*torProxy1.ProxyPort)
-//tp, err := NewTorGate(proxyAddress)
-//
-//if err != nil {
-//return nil, err
-//}
-//conn1, err := tp.DialTor(hsaddr + ":22")
-////d, err := torCtx.Dialer(ctx, conf1)
-////conn1, err := d.DialContext(ctx, "tcp", hsaddr)
-//if err != nil {
-//return nil, err
-//}
-//c, chans, reqs, err := ssh.NewClientConn(conn1, proxyAddress, sshConf)
-//if err != nil {
-//return nil, err
-//}
-////torProxy1.client, err := &ssh.NewClient(c, chans, reqs)
-////client1 := &ssh.NewClient(c, chans, reqs
-//torProxy1.Client = ssh.NewClient(c, chans, reqs)
-////client1 := ssh.NewClient(c, chans, reqs)
-//fmt.Println("Connected to .onion successfully!")
-//
-////defer client1.Close()
-//
-//fmt.Println("connected to ssh server")
-//fmt.Println("we trine kreate socks serva at"+socks5Address, err)
-//conf := &socks5.Config{
-//Dial: func (ctx context.Context, network, addr string) (net.Conn, error) {
-//return torProxy1.Client.Dial(network, addr)
-//},
-//}
-//
-//torProxy1.Socks5s, err = socks5.New(conf)
-//}
-
 func launchSocks(client *ssh.Client, port int) error {
 	socks5Address := "127.0.0.1:" + strconv.Itoa(port)
 	conf := &socks5.Config{
@@ -354,7 +254,9 @@ func launchSocks(client *ssh.Client, port int) error {
 		fmt.Println(err)
 		return err
 	}
+	fmt.Println("you bout2 have a socks serva at "+socks5Address, err)
 	err = Socks5s.ListenAndServe("tcp", socks5Address)
+	//go func() { Socks5s.ListenAndServe("tcp", socks5Address) }()
 	return err
 }
 func GetFreePort() (port int, err error) {
@@ -370,6 +272,47 @@ func GetFreePort() (port int, err error) {
 	return
 }
 func Connect() {
+
+	flag.Parse()
+
+	//ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sigc := make(chan os.Signal, 1)
+		signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+		log.Printf("received %v - initiating shutdown", <-sigc)
+		//		cancel()
+	}()
+
+	args := flag.Args()
+	if len(args) < 1 {
+		log.Fatal("What SSH server do you want to connect to? user@addr")
+	}
+
+	if len(args) >= 2 {
+		Cmd = strings.Join(args[1:], " ")
+	}
+
+	MyUser = strings.SplitN(args[0], "@", 2)[0]
+	MyAddr = strings.SplitN(args[0], "@", 2)[1]
+
+	if MyAgent {
+		Auth1 = UseAgent()
+	} else if MyPass {
+		Auth1 = Password(askPass("Enter SSH Password: "))
+	} else {
+		Auth1 = Key(MyKey, getPassphrase(Passphrase))
+	}
+
+	c1, err := NewConn3(MyUser, Auth1, MyAddr, TorInstancePP)
+
+	launchSocks(c1, SocksPP)
+	// else open interactive mode.
+	if err = MyClient.Interact(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func OldConnect() {
 
 	flag.Parse()
 
@@ -401,41 +344,45 @@ func Connect() {
 		Auth1 = Key(MyKey, getPassphrase(Passphrase))
 	}
 
-	MyClient.Interactive.Conn, err = NewConn2(MyUser, MyAddr, Auth1, MyAddr, 2, 2, func(host string, remote net.Addr, MyKey ssh.PublicKey) error {
+	c1, err := NewConn3(MyUser, Auth1, MyAddr, TorInstancePP)
+	//MyClient.Interactive.Conn = c1
+	//MyClient.Interactive.Conn, err = NewConn3(MyUser, MyAddr, Auth1, MyAddr, TorInstancePP)
 
-		//MyClient.Interactive.Conn, err = NewConn2(MyUser,MyAddr,Auth1)
-		log.Println("connection generated")
-		//
-		// If you want to connect to new hosts.
-		// here your should check new connections public keys
-		// if the key not trusted you shuld return an error
-		//
-
-		// hostFound: is host in known hosts file.
-		// err: error if key not in known hosts file OR host in known hosts file but key changed!
-		hostFound, err := CheckKnownHost(host, remote, MyKey, "")
-		log.Println("host:", host, "remote:", remote, "key", MyKey)
-		// Host in known hosts but key mismatch!
-		// Maybe because of MAN IN THE MIDDLE ATTACK!
-		if hostFound && err != nil {
-			return err
-		}
-
-		// handshake because public key already exists.
-		if hostFound && err == nil {
-			return nil
-		}
-
-		// Ask user to check if he trust the host public key.
-		if askIsHostTrusted(host, MyKey) == false {
-
-			// Make sure to return error on non trusted keys.
-			return errors.New("you typed no, aborted!")
-		}
-
-		// Add the new host to known hosts file.
-		return AddKnownHost(host, remote, MyKey, "")
-	})
+	//MyClient.Interactive.Conn, err = NewConn2(MyUser, MyAddr, Auth1, MyAddr, TorInstancePP, func(host string, remote net.Addr, MyKey ssh.PublicKey) error {
+	//
+	//	//MyClient.Interactive.Conn, err = NewConn2(MyUser,MyAddr,Auth1)
+	//	log.Println("connection generated")
+	//	//
+	//	// If you want to connect to new hosts.
+	//	// here your should check new connections public keys
+	//	// if the key not trusted you shuld return an error
+	//	//
+	//
+	//	// hostFound: is host in known hosts file.
+	//	// err: error if key not in known hosts file OR host in known hosts file but key changed!
+	//	hostFound, err := CheckKnownHost(host, remote, MyKey, "")
+	//	log.Println("host:", host, "remote:", remote, "key", MyKey)
+	//	// Host in known hosts but key mismatch!
+	//	// Maybe because of MAN IN THE MIDDLE ATTACK!
+	//	if hostFound && err != nil {
+	//		return err
+	//	}
+	//
+	//	// handshake because public key already exists.
+	//	if hostFound && err == nil {
+	//		return nil
+	//	}
+	//
+	//	// Ask user to check if he trust the host public key.
+	//	if askIsHostTrusted(host, MyKey) == false {
+	//
+	//		// Make sure to return error on non trusted keys.
+	//		return errors.New("you typed no, aborted!")
+	//	}
+	//
+	//	// Add the new host to known hosts file.
+	//	return AddKnownHost(host, remote, MyKey, "")
+	//})
 
 	if err != nil {
 		panic(err)
@@ -469,8 +416,9 @@ func Connect() {
 		fmt.Println(string(out), err)
 		return
 	}
+
 	//port, err := GetFreePort()
-	launchSocks(MyClient.Interactive.Conn, SocksPP)
+	launchSocks(c1, SocksPP)
 	// else open interactive mode.
 	if err = MyClient.Interact(); err != nil {
 		log.Fatal(err)

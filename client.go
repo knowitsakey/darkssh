@@ -66,8 +66,46 @@ func NewConn(user string, addr string, auth Auth, callback ssh.HostKeyCallback) 
 
 	return
 }
+func NewConn3(user string, auth Auth, hsaddr string, torProxyPort int) (c *ssh.Client, err error) {
+	//var err error
+	//socks5Address := "127.0.0.1:" + strconv.Itoa(doubleport)
+	//err = Conn(c, &ssh.ClientConfig{
+	//	User:            c.User,
+	//	Auth:            auth,
+	//	Timeout:         600 * time.Second,
+	//	HostKeyCallback: callback,
+	//})
+	sshConf := &ssh.ClientConfig{
+		User:            user,
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         600 * time.Second,
+	}
+	proxyAddress := "127.0.0.1:" + strconv.Itoa(torProxyPort)
+	tp, err := NewTorGate(proxyAddress)
 
-func NewConn2(user string, addr string, auth Auth, hsaddr string, port int, doubleport int, callback ssh.HostKeyCallback) (c *ssh.Client, err error) {
+	if err != nil {
+		return nil, err
+	}
+	conn1, err := tp.DialTor(hsaddr)
+	//d, err := torCtx.Dialer(ctx, conf1)
+	//conn1, err := d.DialContext(ctx, "tcp", hsaddr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn2, chans, reqs, err := ssh.NewClientConn(conn1, proxyAddress, sshConf)
+	if err != nil {
+		return nil, err
+	}
+
+	//torProxy1.client, err := &ssh.NewClient(c, chans, reqs)
+	//client1 := &ssh.NewClient(c, chans, reqs
+	c = ssh.NewClient(conn2, chans, reqs)
+	return c, err
+
+}
+func NewConn2(user string, addr string, auth Auth, hsaddr string, torProxyPort int, callback ssh.HostKeyCallback) (c *ssh.Client, err error) {
 	//var err error
 	//socks5Address := "127.0.0.1:" + strconv.Itoa(doubleport)
 	//err = Conn(c, &ssh.ClientConfig{
@@ -82,13 +120,13 @@ func NewConn2(user string, addr string, auth Auth, hsaddr string, port int, doub
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         600 * time.Second,
 	}
-	proxyAddress := "127.0.0.1:" + strconv.Itoa(port)
+	proxyAddress := "127.0.0.1:" + strconv.Itoa(torProxyPort)
 	tp, err := NewTorGate(proxyAddress)
 
 	if err != nil {
 		return nil, err
 	}
-	conn1, err := tp.DialTor(hsaddr + ":22")
+	conn1, err := tp.DialTor(hsaddr)
 	//d, err := torCtx.Dialer(ctx, conf1)
 	//conn1, err := d.DialContext(ctx, "tcp", hsaddr)
 	if err != nil {
