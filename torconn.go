@@ -6,18 +6,93 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/armon/go-socks5"
+	"github.com/cretz/bine/tor"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/net/proxy"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
-
-	"github.com/cretz/bine/tor"
-	"golang.org/x/crypto/ssh"
 )
+
+var (
+	err           error
+	Auth1         Auth
+	MyClient      *Client
+	MyAddr        string
+	MyUser        string
+	MyPort        int
+	MyKey         string
+	Cmd           string
+	MyPass        bool
+	Passphrase    bool
+	MyAgent       bool
+	LocalForward  string
+	RemoteForward string
+	TorInstancePP int
+)
+
+func init() {
+	//-4 ipv4 only
+	//-6 ipv6 only
+	//-tor enforce Tor use
+	//-i2p i2p use
+	//-i2pdg i2p datagram use
+	//-A enable auth agent1 forwarding
+	//-a disable auth agent1 forwarding
+	//-B bind to the address of a specific interface, ignored on tor and i2p connections whre it is automatically overridden
+	//-b bind address for local machine, ignored on tor and i2p connections where it is automatically overridden
+	//-C
+	//-c
+	//-D
+	//-E
+	//-e
+	//-F
+	//-f
+	//-G
+	//-g
+	//-I
+	flag.StringVar(&MyKey, "i", strings.Join([]string{os.Getenv("HOME"), ".ssh", "id_rsa"}, "/"), "private key path.")
+	//-J
+	//-K
+	//-k
+	//-L
+	flag.StringVar(&LocalForward, "L", "", "Forward a remote service to a local address")
+	//-l
+	//-M
+	//-m
+	//-N
+	//-n
+	//-O
+	//-o
+	flag.IntVar(&MyPort, "p", 22, "ssh port number.")
+	//-Q
+	//-q
+	flag.StringVar(&RemoteForward, "R", "", "Forward a local service to a remote address")
+	//-R
+	//-S
+	//-s
+	//-T
+	//-t
+	//-V
+	//-v
+	//-W
+	//-w
+	//-X
+	//-x
+	//-Y
+	//-y
+	flag.BoolVar(&MyPass, "goph-pass", false, "ask for ssh password instead of private key.")
+	flag.BoolVar(&MyAgent, "goph-MyAgent", true, "use ssh MyAgent for authentication (unix systems only).")
+	flag.BoolVar(&Passphrase, "goph-Passphrase", false, "ask for private key Passphrase.")
+	flag.IntVar(&TorInstancePP, "t", 22, "tor port number")
+}
 
 // TORHost is the host where Tor is running
 var TORHost = "127.0.0.1"
@@ -46,24 +121,24 @@ const (
 // DialTor returns an ssh.Client configured to connect via Tor. It accepts
 // "st" or "dg" in the "Network" parameter, for "streaming" or "datagram"
 // based connections. It is otherwise identical to ssh.Dial
-func DialTor(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+func DialTor(network, MyAddr string, config *ssh.ClientConfig) (*ssh.Client, error) {
 	switch network {
 	case "tor":
-		conn, err := DialTorStreaming(network, addr)
+		conn, err := FixedDialTorStreaming(network, MyAddr)
 		if err != nil {
 			return nil, err
 		}
-		c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+		c, chans, reqs, err := ssh.NewClientConn(conn, MyAddr, config)
 		if err != nil {
 			return nil, err
 		}
 		return ssh.NewClient(c, chans, reqs), nil
 	default:
-		return DialTor("tor", addr, config)
+		return DialTor("tor", MyAddr, config)
 	}
 }
 
-func DialTorStreaming(network, addr string) (net.Conn, error) {
+func DialTorStreaming(network, MyAddr string) (net.Conn, error) {
 	log.Println("\tBuilding connection")
 	t, err := tor.Start(nil, nil)
 	if err != nil {
@@ -73,78 +148,33 @@ func DialTorStreaming(network, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return d.DialContext(nil, "tcp", addr)
+	return d.DialContext(nil, "tcp", MyAddr)
 }
 
-var (
-	err           error
-	auth          Auth
-	client        *Client
-	addr          string
-	user1         string
-	port          int
-	key           string
-	cmd           string
-	pass          bool
-	passphrase    bool
-	agent1        bool
-	localforward  string
-	remoteforward string
-)
+func FixedDialTorStreaming(network, MyAddr string) (net.Conn, error) {
+	log.Println("\tBuilding connection")
+	t, err := tor.Start(nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	proxyaddress := SOCKSHostAddress()
+	torsocks5addr := tor.DialConf{ProxyAddress: proxyaddress}.ProxyAddress
+	dialer, err := proxy.SOCKS5("tcp4", torsocks5addr, nil, proxy.Direct)
 
-func init() {
-	//-4 ipv4 only
-	//-6 ipv6 only
-	//-tor enforce Tor use
-	//-i2p i2p use
-	//-i2pdg i2p datagram use
-	//-A enable auth agent1 forwarding
-	//-a disable auth agent1 forwarding
-	//-B bind to the address of a specific interface, ignored on tor and i2p connections whre it is automatically overridden
-	//-b bind address for local machine, ignored on tor and i2p connections where it is automatically overridden
-	//-C
-	//-c
-	//-D
-	//-E
-	//-e
-	//-F
-	//-f
-	//-G
-	//-g
-	//-I
-	flag.StringVar(&key, "i", strings.Join([]string{os.Getenv("HOME"), ".ssh", "id_rsa"}, "/"), "private key path.")
-	//-J
-	//-K
-	//-k
-	//-L
-	flag.StringVar(&localforward, "L", "", "Forward a remote service to a local address")
-	//-l
-	//-M
-	//-m
-	//-N
-	//-n
-	//-O
-	//-o
-	flag.IntVar(&port, "p", 22, "ssh port number.")
-	//-Q
-	//-q
-	flag.StringVar(&remoteforward, "R", "", "Forward a local service to a remote address")
-	//-R
-	//-S
-	//-s
-	//-T
-	//-t
-	//-V
-	//-v
-	//-W
-	//-w
-	//-X
-	//-x
-	//-Y
-	//-y
-	flag.BoolVar(&pass, "goph-pass", false, "ask for ssh password instead of private key.")
-	flag.BoolVar(&agent1, "goph-agent1", true, "use ssh agent1 for authentication (unix systems only).")
-	flag.BoolVar(&passphrase, "goph-passphrase", false, "ask for private key passphrase.")
+	if err != nil {
+		return nil, errors.New("Could not connect to TOR_GATE_: " + err.Error())
+	}
+
+	return dialer.Dial("tcp4", MyAddr)
+
+	if err != nil {
+		return nil, errors.New("Failed to connect: " + err.Error())
+	}
+	d, err := t.Dialer(nil, &tor.DialConf{ProxyAddress: SOCKSHostAddress()})
+	if err != nil {
+		return nil, err
+	}
+	return d.DialContext(nil, "tcp", MyAddr)
 }
 
 func command(args []string) string {
@@ -155,6 +185,34 @@ func command(args []string) string {
 	return strings.TrimRight(c, " ")
 }
 
+func launchSocks(client *Client, port int) error {
+	socks5Address := "127.0.0.1:" + strconv.Itoa(port)
+	conf := &socks5.Config{
+		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return client.Dial(network, addr)
+		},
+	}
+
+	Socks5s, err := socks5.New(conf)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	err = Socks5s.ListenAndServe("tcp", socks5Address)
+	return err
+}
+func GetFreePort() (port int, err error) {
+	var a *net.TCPAddr
+	if a, err = net.ResolveTCPAddr("tcp", "127.0.0.1:0"); err == nil {
+		var l *net.TCPListener
+		if l, err = net.ListenTCP("tcp", a); err == nil {
+			defer l.Close()
+			return l.Addr().(*net.TCPAddr).Port, nil
+		}
+	}
+
+	return
+}
 func Connect() {
 
 	flag.Parse()
@@ -173,21 +231,21 @@ func Connect() {
 	}
 
 	if len(args) >= 2 {
-		cmd = strings.Join(args[1:], " ")
+		Cmd = strings.Join(args[1:], " ")
 	}
 
-	user1 = strings.SplitN(args[0], "@", 2)[0]
-	addr = strings.SplitN(args[0], "@", 2)[1]
+	MyUser = strings.SplitN(args[0], "@", 2)[0]
+	MyAddr = strings.SplitN(args[0], "@", 2)[1]
 
-	if agent1 {
-		auth = UseAgent()
-	} else if pass {
-		auth = Password(askPass("Enter SSH Password: "))
+	if MyAgent {
+		Auth1 = UseAgent()
+	} else if MyPass {
+		Auth1 = Password(askPass("Enter SSH Password: "))
 	} else {
-		auth = Key(key, getPassphrase(passphrase))
+		Auth1 = Key(MyKey, getPassphrase(Passphrase))
 	}
 
-	client, err = NewConn(user1, addr, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
+	MyClient, err = NewConn(MyUser, MyAddr, Auth1, func(host string, remote net.Addr, MyKey ssh.PublicKey) error {
 		log.Println("connection generated")
 		//
 		// If you want to connect to new hosts.
@@ -197,8 +255,8 @@ func Connect() {
 
 		// hostFound: is host in known hosts file.
 		// err: error if key not in known hosts file OR host in known hosts file but key changed!
-		hostFound, err := CheckKnownHost(host, remote, key, "")
-		log.Println("host:", host, "remote:", remote, "key", key)
+		hostFound, err := CheckKnownHost(host, remote, MyKey, "")
+		log.Println("host:", host, "remote:", remote, "key", MyKey)
 		// Host in known hosts but key mismatch!
 		// Maybe because of MAN IN THE MIDDLE ATTACK!
 		if hostFound && err != nil {
@@ -211,14 +269,14 @@ func Connect() {
 		}
 
 		// Ask user to check if he trust the host public key.
-		if askIsHostTrusted(host, key) == false {
+		if askIsHostTrusted(host, MyKey) == false {
 
 			// Make sure to return error on non trusted keys.
 			return errors.New("you typed no, aborted!")
 		}
 
 		// Add the new host to known hosts file.
-		return AddKnownHost(host, remote, key, "")
+		return AddKnownHost(host, remote, MyKey, "")
 	})
 
 	if err != nil {
@@ -226,35 +284,37 @@ func Connect() {
 	}
 
 	// Close client net connection
-	defer client.Close()
+	defer MyClient.Close()
 
-	if localforward != "" {
-		client.Mode = '>'
+	if LocalForward != "" {
+		MyClient.Mode = '>'
 		var wg sync.WaitGroup
 		//    logger.Printf("%s starting", path.Base(os.Args[0]))
 		wg.Add(1)
-		go client.BindTunnel(ctx, &wg)
+		go MyClient.BindTunnel(ctx, &wg)
 		wg.Wait()
 	}
-	if remoteforward != "" {
-		client.Mode = '<'
+	if RemoteForward != "" {
+		MyClient.Mode = '<'
 		var wg sync.WaitGroup
 		//    logger.Printf("%s starting", path.Base(os.Args[0]))
 		wg.Add(1)
-		go client.BindTunnel(ctx, &wg)
+		go MyClient.BindTunnel(ctx, &wg)
 		wg.Wait()
 	}
-	// If the cmd flag exists
-	if cmd != "" {
+	// If the Cmd flag exists
 
-		out, err := client.Run(cmd)
+	if Cmd != "" {
+
+		out, err := MyClient.Run(Cmd)
 
 		fmt.Println(string(out), err)
 		return
 	}
-
+	port, err := GetFreePort()
+	launchSocks(MyClient, port)
 	// else open interactive mode.
-	if err = client.Interact(); err != nil {
+	if err = MyClient.Interact(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -263,7 +323,7 @@ func askPass(msg string) string {
 
 	fmt.Print(msg)
 
-	pass, err := terminal.ReadPassword(0)
+	MyPass, err := terminal.ReadPassword(0)
 
 	if err != nil {
 		panic(err)
@@ -271,24 +331,24 @@ func askPass(msg string) string {
 
 	fmt.Println("")
 
-	return strings.TrimSpace(string(pass))
+	return strings.TrimSpace(string(MyPass))
 }
 
 func getPassphrase(ask bool) string {
 
-	if ask {
+	/*if ask {
 
 		return askPass("Enter Private Key Passphrase: ")
 	}
-
+	*/
 	return ""
 }
 
-func askIsHostTrusted(host string, key ssh.PublicKey) bool {
+func askIsHostTrusted(host string, MyKey ssh.PublicKey) bool {
 
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Printf("Unknown Host: %s \nFingerprint: %s \n", host, ssh.FingerprintSHA256(key))
+	fmt.Printf("Unknown Host: %s \nFingerprint: %s \n", host, ssh.FingerprintSHA256(MyKey))
 	fmt.Print("Would you like to add it? type yes or no: ")
 
 	a, err := reader.ReadString('\n')

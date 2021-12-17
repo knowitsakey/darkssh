@@ -6,10 +6,11 @@ require (
 	github.com/cretz/bine v0.2.0
 	github.com/eyedeekay/goSam v0.32.30
 	github.com/eyedeekay/sam3 v0.32.32
-	github.com/eyedeekay/sshtunnel v0.0.0-20190531212543-2c4ef838c320
+	//github.com/eyedeekay/sshtunnel v0.0.0-20190531212543-2c4ef838c320
 	github.com/gliderlabs/ssh v0.3.3
 	github.com/pkg/sftp v1.13.4
 	golang.org/x/crypto v0.0.0-20211209193657-4570a0811e8b
+	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 )
 
 require (
@@ -20,7 +21,5 @@ require (
 	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
 )
-
-replace github.com/eyedeekay/sshtunnel => /home/based/sshtunnel
 
 //replace github.com/eyedeekay/darkssh/goph => /home/based/darkssh/goph
