@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"github.com/armon/go-socks5"
 	"github.com/cretz/bine/tor"
+	//"github.com/things-go/go-socks5"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/net/proxy"
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -254,11 +256,57 @@ func launchSocks(client *ssh.Client, port int) error {
 		fmt.Println(err)
 		return err
 	}
+
+	//ctxShutDown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	cmd := exec.CommandContext(ctx, "sleep", "5")
+	go func() {
+		oscall := <-c
+		log.Printf("system call:%+v", oscall)
+		log.Fatalf("listen:%+s\n", err)
+		_ = cmd.Process.Signal(os.Kill)
+	}()
+
+	if err = Socks5s.ListenAndServe("tcp", socks5Address); err != nil {
+		log.Fatalf("listen:%+s\n", err)
+		_ = cmd.Process.Signal(os.Kill)
+	}
+
 	fmt.Println("you bout2 have a socks serva at "+socks5Address, err)
-	err = Socks5s.ListenAndServe("tcp", socks5Address)
+
 	//go func() { Socks5s.ListenAndServe("tcp", socks5Address) }()
 	return err
 }
+
+//func launchSocks(client *ssh.Client, port int) error {
+//	socks5Address := "127.0.0.1:" + strconv.Itoa(port)
+//	conf := &socks5.Config{
+//		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+//			return client.Dial(network, addr)
+//		},
+//	}
+//
+//	Socks5s, err := socks5.New(conf)
+//	if err != nil {
+//		fmt.Println(err)
+//		return err
+//	}
+//
+//	go func() {
+//		if err = Socks5s.ListenAndServe("tcp", socks5Address); err != nil {
+//			log.Fatalf("listen:%+s\n", err)
+//		}
+//	}()
+//
+//	fmt.Println("you bout2 have a socks serva at "+socks5Address, err)
+//
+//	//go func() { Socks5s.ListenAndServe("tcp", socks5Address) }()
+//	return err
+//}
+
 func GetFreePort() (port int, err error) {
 	var a *net.TCPAddr
 	if a, err = net.ResolveTCPAddr("tcp", "127.0.0.1:0"); err == nil {
@@ -291,10 +339,13 @@ func Connect() {
 	if len(args) >= 2 {
 		Cmd = strings.Join(args[1:], " ")
 	}
-
-	MyUser = strings.SplitN(args[0], "@", 2)[0]
-	MyAddr = strings.SplitN(args[0], "@", 2)[1]
-
+	inputstr := strings.SplitN(args[0], "@", 4)
+	MyUser = inputstr[0]
+	MyAddr = inputstr[1]
+	tipp := inputstr[2]
+	s5pp := inputstr[3]
+	TorInstancePP, err = strconv.Atoi(tipp)
+	SocksPP, err = strconv.Atoi(s5pp)
 	if MyAgent {
 		Auth1 = UseAgent()
 	} else if MyPass {
@@ -311,6 +362,43 @@ func Connect() {
 		log.Fatal(err)
 	}
 }
+
+//func serve(ctx context.Context) (err error) {
+//
+//	srv := &http.Server{
+//		Addr:    ":6969",
+//		Handler: mux,
+//	}
+//
+//	go func() {
+//		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+//			log.Fatalf("listen:%+s\n", err)
+//		}
+//	}()
+//
+//	log.Printf("server started")
+//
+//	<-ctx.Done()
+//
+//	log.Printf("server stopped")
+//
+//	ctxShutDown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer func() {
+//		cancel()
+//	}()
+//
+//	if err = srv.Shutdown(ctxShutDown); err != nil {
+//		log.Fatalf("server Shutdown Failed:%+s", err)
+//	}
+//
+//	log.Printf("server exited properly")
+//
+//	if err == http.ErrServerClosed {
+//		err = nil
+//	}
+//
+//	return
+//}
 
 func OldConnect() {
 
@@ -333,8 +421,8 @@ func OldConnect() {
 		Cmd = strings.Join(args[1:], " ")
 	}
 
-	MyUser = strings.SplitN(args[0], "@", 2)[0]
-	MyAddr = strings.SplitN(args[0], "@", 2)[1]
+	MyUser = strings.SplitN(args[0], "@", 3)[0]
+	MyAddr = strings.SplitN(args[0], "@", 3)[1]
 
 	if MyAgent {
 		Auth1 = UseAgent()

@@ -10,12 +10,13 @@ require (
 	//github.com/eyedeekay/sshtunnel v0.0.0-20190531212543-2c4ef838c320
 	github.com/gliderlabs/ssh v0.3.3
 	github.com/pkg/sftp v1.13.4
+	//github.com/things-go/go-socks5 v0.0.2
 	golang.org/x/crypto v0.0.0-20211209193657-4570a0811e8b
 )
 
 require (
 	github.com/dsnet/golib/jsonfmt v0.0.0-20190531212259-571cdbcff553
-	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
+	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f
 )
 
 require (
@@ -25,4 +26,4 @@ require (
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
 )
 
-//replace github.com/eyedeekay/darkssh/goph => /home/based/darkssh/goph
+replace github.com/armon/go-socks5 => /home/based/newsocks/go-socks5
